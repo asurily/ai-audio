@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0c10">
+  <title>任务管理 · 映刻</title>
+  <link rel="stylesheet" href="/admin.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-mark">◇</span><span>映刻<span class="dot">.</span></span></a>
+    <span class="nav-label">工作台</span>
+    <nav>
+      <a href="/"><span>▷</span> 视频生成</a>
+      <a href="/admin" class="active"><span>▦</span> 任务管理<i></i></a>
+    </nav>
+    <div class="side-status"><span></span>管理控制台</div>
+  </aside>
+
+  <main>
+    <header>
+      <div><span>管理控制台</span><b>/</b><strong>视频任务</strong></div>
+      <a href="/">返回创作台 ↗</a>
+    </header>
+    <div class="content">
+      <section class="page-title">
+        <div><span>ADMIN / VIDEO TASKS</span><h1>视频生成任务</h1><p>查看任务状态、生成耗时，并下载已完成的视频。</p></div>
+        <button id="refreshButton" type="button"><span id="refreshIcon">↻</span> 刷新任务</button>
+      </section>
+
+      <section class="stats" aria-label="任务统计">
+        <article><span>全部任务</span><strong id="totalCount">—</strong></article>
+        <article><span>生成中</span><strong id="activeCount">—</strong></article>
+        <article><span>已完成</span><strong id="successCount">—</strong></article>
+        <article><span>异常任务</span><strong id="failedCount">—</strong></article>
+      </section>
+
+      <section class="task-card">
+        <div class="card-head"><div><h2>任务列表</h2><span id="updatedAt">正在加载…</span></div><span class="auto-refresh"><i></i> 每 20 秒自动刷新</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>任务 ID</th><th>模型</th><th>视频时长</th><th>任务状态</th><th>完成耗时</th><th>创建时间</th><th>视频下载</th></tr></thead>
+            <tbody id="taskRows"></tbody>
+          </table>
+          <div class="empty hidden" id="emptyState"><span>◇</span><strong>暂无视频任务</strong><p>从创作台生成第一段视频后，任务会显示在这里。</p><a href="/">去生成视频</a></div>
+          <div class="loading" id="loadingState"><span></span><p>正在读取任务…</p></div>
+        </div>
+        <div class="error hidden" id="errorMessage" role="alert"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

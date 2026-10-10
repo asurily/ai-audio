@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0c10">
+  <title>映刻 · AI 视频创作</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="映刻首页">
+        <span class="brand-mark"><span></span><span></span><span></span></span>
+        <span>映刻<span class="brand-dot">.</span></span>
+      </a>
+      <div class="sidebar-group-label">创作空间</div>
+      <nav aria-label="主导航">
+        <a class="nav-item active" href="/" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 9 6-9 6V6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><rect x="2.5" y="2.5" width="19" height="19" rx="5" stroke="currentColor" stroke-width="1.5"/></svg>
+          视频生成
+          <span class="nav-active-dot"></span>
+        </a>
+        <a class="nav-item secondary" href="/admin">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="3" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="14" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="14" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.5"/></svg>
+          任务管理
+        </a>
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-bottom">
+        <span class="status-dot" id="configDot"></span>
+        <span id="configText">正在检查服务</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumbs"><span>创作空间</span><span class="slash">/</span><strong>视频生成</strong></div>
+        <div class="topbar-right"><span class="topbar-pill"><span></span>AI VIDEO STUDIO</span></div>
+      </header>
+
+      <div class="workspace">
+        <section class="intro">
+          <div class="eyebrow"><span class="eyebrow-line"></span> 让灵感成为画面</div>
+          <h1>用想象力，<em>生成下一帧。</em></h1>
+          <p>写下脑海中的场景，让 AI 为你呈现一段有声有色的视频。</p>
+        </section>
+
+        <div class="work-grid">
+          <section class="creator-panel" aria-labelledby="creatorTitle">
+            <div class="section-heading">
+              <div><span class="section-index">01 / CREATE</span><h2 id="creatorTitle">描述你的画面</h2></div>
+              <span class="heading-icon" aria-hidden="true">✦</span>
+            </div>
+
+            <form id="createForm">
+              <div class="prompt-wrap">
+                <label class="sr-only" for="prompt">视频画面描述</label>
+                <textarea id="prompt" maxlength="5000" placeholder="描述你想看到的场景、主体、镜头运动和氛围…" required></textarea>
+                <div class="prompt-footer">
+                  <span class="tip-icon" aria-hidden="true">✧</span>
+                  <span>试着描述光线、镜头与情绪，让画面更生动</span>
+                  <span class="char-count"><span id="charCount">0</span> / 5000</span>
+                </div>
+              </div>
+
+              <button type="button" class="inspiration" id="inspireButton">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2ZM19 17l.6 1.4L21 19l-1.4.6L19 21l-.6-1.4L17 19l1.4-.6L19 17Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+                试试灵感示例
+                <span>↗</span>
+              </button>
+
+              <div class="template-area">
+                <div class="template-toolbar">
+                  <div><strong>主体模板</strong><span>在描述中输入 @模板名 引用固定形象</span></div>
+                  <button type="button" id="newTemplateButton"><span>＋</span> 保存模板</button>
+                </div>
+                <div class="template-list" id="templateList"><span class="template-empty">还没有保存模板</span></div>
+                <div class="template-editor hidden" id="templateEditor">
+                  <div class="template-editor-head"><strong id="templateEditorTitle">新建主体模板</strong><button type="button" id="closeTemplateButton" aria-label="关闭">×</button></div>
+                  <label for="templateName">模板名称</label>
+                  <div class="template-name-wrap"><span>@</span><input id="templateName" maxlength="20" placeholder="例如：小雅"></div>
+                  <label for="templateDescription">固定形象描述</label>
+                  <textarea id="templateDescription" maxlength="1500" placeholder="详细描述人物的年龄、发型、服装、面部特征和整体风格。每次引用都会完整加入生成描述。"></textarea>
+                  <div class="template-editor-actions"><button type="button" class="template-delete hidden" id="deleteTemplateButton">删除模板</button><button type="button" class="template-cancel" id="cancelTemplateButton">取消</button><button type="button" class="template-save" id="saveTemplateButton">保存模板</button></div>
+                  <div class="template-error hidden" id="templateError" role="alert"></div>
+                </div>
+                <div class="mention-menu hidden" id="mentionMenu" role="listbox"></div>
+              </div>
+
+              <div class="form-divider"></div>
+              <div class="section-heading settings-heading"><div><span class="section-index">02 / SETTINGS</span><h2>生成设置</h2></div></div>
+
+              <div class="field">
+                <label for="model">生成模型</label>
+                <div class="select-wrap">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 2 2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+                  <select id="model" name="model">
+                    <option value="Doubao-Seedance-2.5">Doubao-Seedance-2.5</option>
+                    <option value="Doubao-Seedance-2.0">Doubao-Seedance-2.0</option>
+                    <option value="Doubao-Seedance-2.0-fast">Doubao-Seedance-2.0-fast</option>
+                    <option value="Doubao-Seedance-2.0-mini">Doubao-Seedance-2.0-mini</option>
+                    <option value="custom">填写其他模型 ID…</option>
+                  </select>
+                  <span class="chevron" aria-hidden="true"></span>
+                </div>
+                <input class="custom-model hidden" id="customModel" type="text" maxlength="120" placeholder="输入服务支持的模型 ID" aria-label="其他模型 ID">
+              </div>
+
+              <fieldset class="ratio-field">
+                <legend>画面比例 <span>选择视频的呈现方式</span></legend>
+                <div class="ratio-options">
+                  <label class="ratio-option"><input type="radio" name="ratio" value="16:9" checked><span class="ratio-shape landscape"></span><strong>16:9</strong><small>横屏</small></label>
+                  <label class="ratio-option"><input type="radio" name="ratio" value="9:16"><span class="ratio-shape portrait"></span><strong>9:16</strong><small>竖屏</small></label>
+                  <label class="ratio-option"><input type="radio" name="ratio" value="1:1"><span class="ratio-shape square"></span><strong>1:1</strong><small>方形</small></label>
+                  <label class="ratio-option"><input type="radio" name="ratio" value="4:3"><span class="ratio-shape classic"></span><strong>4:3</strong><small>经典</small></label>
+                  <label class="ratio-option"><input type="radio" name="ratio" value="3:4"><span class="ratio-shape upright"></span><strong>3:4</strong><small>肖像</small></label>
+                </div>
+              </fieldset>
+
+              <div class="advanced-settings">
+                <div class="field duration-field">
+                  <label for="duration">视频时长 <span id="maxDurationLabel">最长 30 秒</span></label>
+                  <div class="duration-control">
+                    <input id="duration" name="duration" type="range" min="5" max="30" step="5" value="10">
+                    <output id="durationOutput" for="duration">10 秒</output>
+                  </div>
+                  <div class="duration-marks" id="durationMarks" aria-hidden="true"><span>5s</span><span>10s</span><span>15s</span><span>20s</span><span>25s</span><span>30s</span></div>
+                </div>
+                <div class="subtitle-setting audio-setting">
+                  <div><label for="generateAudio">生成音频</label><span>为视频同步生成环境音和声音</span></div>
+                  <label class="switch"><input id="generateAudio" name="generateAudio" type="checkbox" checked><span></span><em class="sr-only">生成音频</em></label>
+                </div>
+                <div class="subtitle-setting">
+                  <div><label for="subtitleEnabled">画面字幕</label><span>将字幕要求加入视频生成描述</span></div>
+                  <label class="switch"><input id="subtitleEnabled" name="subtitleEnabled" type="checkbox"><span></span><em class="sr-only">启用字幕</em></label>
+                </div>
+                <div class="subtitle-input hidden" id="subtitleInputWrap">
+                  <label class="sr-only" for="subtitleText">字幕内容</label>
+                  <textarea id="subtitleText" maxlength="1000" placeholder="输入要显示的字幕；留空则根据旁白自动生成中文字幕"></textarea>
+                  <span><b id="subtitleCount">0</b> / 1000</span>
+                </div>
+              </div>
+
+              <div class="fixed-settings"><span>✦</span> 生成视频不添加水印</div>
+              <button class="generate-button" id="generateButton" type="submit"><span class="button-sparkle">✦</span><span id="generateLabel">立即生成视频</span><span class="button-arrow">↗</span></button>
+              <p class="form-note">提交后会自动查询进度，生成完成即可预览和下载。</p>
+            </form>
+          </section>
+
+          <section class="result-panel" aria-labelledby="resultTitle">
+            <div class="section-heading result-heading"><div><span class="section-index">03 / PREVIEW</span><h2 id="resultTitle">创作预览</h2></div><span class="preview-indicator" id="previewIndicator">等待生成</span></div>
+            <div class="preview-stage" id="previewStage">
+              <div class="stage-grain"></div>
+              <div class="stage-orb orb-one"></div><div class="stage-orb orb-two"></div>
+              <div class="preview-empty" id="previewEmpty"><div class="preview-symbol"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="10" y="15" width="44" height="34" rx="8" stroke="currentColor" stroke-width="1.5"/><path d="m28 25 13 7-13 7V25Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M23 55h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div><strong>你的作品将在这里出现</strong><span>输入画面描述，开启创作</span></div>
+              <div class="preview-progress hidden" id="previewProgress"><div class="progress-animation"><div class="progress-ring"></div><span>✦</span></div><strong id="progressTitle">正在准备画面</strong><span id="progressSubtitle">灵感正在变成影像，请稍候…</span><div class="progress-track"><span></span></div></div>
+              <video class="video-player hidden" id="videoPlayer" controls playsinline preload="metadata"></video>
+            </div>
+            <div class="result-meta" id="resultMeta"><span><span class="meta-dot"></span>等待你的第一段作品</span><span id="resultSpecs">10s · HD</span></div>
+            <div class="result-actions"><a class="download-button hidden" id="downloadButton" download>下载视频 <span>↓</span></a><button class="retry-button hidden" id="retryButton" type="button">重新查询状态 ↻</button></div>
+            <div class="message hidden" id="message" role="alert"></div>
+            <div class="how-it-works"><span class="how-label">创作流程</span><div class="flow"><span><b>01</b> 描述画面</span><i></i><span><b>02</b> AI 生成</span><i></i><span><b>03</b> 预览下载</span></div></div>
+          </section>
+        </div>
+        <footer class="page-footer"><span>映刻 · 让每一个想法都有画面</span><span>POWERED BY AI</span></footer>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
