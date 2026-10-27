@@ -64,6 +64,7 @@ function renderRows(items) {
     const badge = document.createElement('span');
     badge.className = `status ${info.kind}`;
     badge.textContent = info.label;
+    if (info.kind === 'failed') badge.title = task.error ? String(task.error) : `上游未提供失败原因；任务 ID：${task.id}`;
     statusCell.append(badge);
     createCell(row, 'elapsed').textContent = formatElapsed(task.elapsedMs);
     createCell(row).textContent = formatTime(task.createdAt);

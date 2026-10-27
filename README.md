@@ -14,19 +14,24 @@ cp .env.example .env
 npm run dev
 ```
 
-打开 <http://localhost:3000>。生产环境可用 `npm start`。服务端代理负责调用 `https://openapi-ait.ke.com`，浏览器不会接触 API Key。
+打开 <http://localhost:3002>。生产环境可用 `npm start`。服务端代理负责调用 `https://openapi-ait.ke.com`，浏览器不会接触 API Key。
 
-任务管理页位于 <http://localhost:3000/admin>。任务记录保存在 `.data/video-tasks.json`，管理页每 20 秒刷新未完成任务的状态。
+任务管理页位于 <http://localhost:3002/admin>。任务记录保存在 `.data/video-tasks.json`，管理页每 20 秒刷新未完成任务的状态。
 
 ## 当前设置
 
-- 可选模型：`Doubao-Seedance-2.5`、`Doubao-Seedance-2.0`、`Doubao-Seedance-2.0-fast`、`Doubao-Seedance-2.0-mini`，也可以填写其他已开通的模型 ID。
+- 可选模型：`Doubao-Seedance-2.5`、`Doubao-Seedance-2.0`、`Doubao-Seedance-2.0-fast`、`Doubao-Seedance-2.0-mini`、`MiniMax-H3`、`MiniMax-H3-Max`，也可以填写其他已开通的模型 ID。
 - 支持比例：`16:9`、`9:16`、`1:1`、`4:3`、`3:4`。实际支持范围以模型接口为准。
-- `Doubao-Seedance-2.5` 可选择 5–30 秒，其他模型可选择 5–15 秒；切换模型时页面会自动调整时长上限。
+- `Doubao-Seedance-2.5` 可按 1 秒步长选择 5–30 秒，其他模型可按 1 秒步长选择 5–15 秒；切换模型时页面会自动调整时长上限。
+- MiniMax 模型可选择分辨率：`MiniMax-H3` 仅 `2K`，`MiniMax-H3-Max` 支持 `768P` / `480P`。
+- `Doubao-Seedance-2.5` 可选择 `480p`、`720p`、`1080p` 分辨率，页面默认选择 `720p`。
+- `MiniMax-H3` 与 `MiniMax-H3-Max` 支持上传首帧 / 尾帧图片（图生视频，比例自动跟随图片）；`MiniMax-H3` 额外支持参考图片（最多 5 张）、参考视频与参考音频（多模态参考生视频）。
+- `Doubao-Seedance-2.5` 支持多模态参考素材：最多 30 张参考图片、10 段参考视频、10 段参考音频，比例使用显式值（如 16:9）。
+- 本地文件以 base64 方式随任务提交。MiniMax 首尾帧与参考素材不能混用，且参考不能只输入音频。
 - 音频可独立选择是否生成，视频不添加水印。
 - 可开启画面字幕，并填写指定字幕；留空时会要求模型根据旁白生成中文字幕。字幕通过提示词交给视频模型生成，效果取决于模型的文字渲染能力。
 - 可在浏览器中保存主体模板，通过 `@模板名` 在画面描述中引用。生成时会自动展开固定形象描述，并要求模型在所有镜头中保持主体特征一致。
-- 首次提交后快速查询一次任务状态，之后每 20 秒查询一次；刷新页面后会继续查询当前任务。
+- 首次提交后快速查询一次任务状态，之后每 60 秒查询一次；刷新页面后会继续查询当前任务。上游若未返回失败原因，页面会显示任务 ID 供排查。
 # ai-audio
 # ai-audio
 # ai-audio

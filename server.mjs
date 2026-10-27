@@ -18,6 +18,75 @@ const assets = new Map([
   ['/admin.js', ['admin.js', 'text/javascript; charset=utf-8']],
 ]);
 const allowedRatios = new Set(['16:9', '9:16', '1:1', '4:3', '3:4']);
+const allowedResolutions = new Set(['2K', '480P', '768P']);
+const modelResolutions = {
+  'Doubao-Seedance-2.5': new Set(['480p', '720p', '1080p']),
+  'MiniMax-H3': new Set(['2K']),
+  'MiniMax-H3-Max': new Set(['480P', '768P']),
+};
+const modelMinDuration = {
+  'Doubao-Seedance-2.5': 4,
+  'Doubao-Seedance-2.0': 4,
+  'Doubao-Seedance-2.0-fast': 4,
+  'Doubao-Seedance-2.0-mini': 4,
+  'MiniMax-H3': 4,
+  'MiniMax-H3-Max': 5,
+};
+const assetRoles = new Set(['first_frame', 'last_frame', 'reference_image', 'reference_video', 'reference_audio']);
+const assetContentTypes = {
+  first_frame: 'image_url',
+  last_frame: 'image_url',
+  reference_image: 'image_url',
+  reference_video: 'video_url',
+  reference_audio: 'audio_url',
+};
+const dataUrlPatterns = {
+  image_url: /^data:image\/(jpe?g|png|webp|heic|heif);base64,[a-z0-9+/=]+$/i,
+  video_url: /^data:video\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+$/i,
+  audio_url: /^data:audio\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+$/i,
+};
+const maxBodyLength = 160_000_000;
+const referenceLimitsByModel = {
+  'MiniMax-H3': { reference_image: 5, reference_video: 1, reference_audio: 1 },
+  'Doubao-Seedance-2.5': { reference_image: 30, reference_video: 10, reference_audio: 10 },
+};
+const defaultReferenceLimits = { reference_image: 5, reference_video: 1, reference_audio: 1 };
+
+function supportsReferences(model) {
+  if (model === 'MiniMax-H3-Max') return false;
+  if (model === 'MiniMax-H3' || model === 'Doubao-Seedance-2.5') return true;
+  return model.startsWith('MiniMax');
+}
+
+function validAssetUrl(url, contentType) {
+  if (typeof url !== 'string' || !url || url.length > maxBodyLength) return false;
+  if (url.startsWith('https://')) return true;
+  return dataUrlPatterns[contentType].test(url);
+}
+
+function normalizeAssets(raw, model) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) throw Object.assign(new Error('素材列表格式不正确。'), { status: 400 });
+  const assets = [];
+  for (const item of raw) {
+    const role = typeof item?.role === 'string' ? item.role.trim() : '';
+    if (!assetRoles.has(role)) throw Object.assign(new Error(`不支持的角色 ${role || '(空)'}，可用值：${[...assetRoles].join('、')}。`), { status: 400 });
+    const contentType = assetContentTypes[role];
+    if (!validAssetUrl(item?.url, contentType)) throw Object.assign(new Error('素材地址必须是 https 链接或合法的 base64 数据。'), { status: 400 });
+    assets.push({ role, url: item.url });
+  }
+  const counts = assets.reduce((acc, asset) => ({ ...acc, [asset.role]: (acc[asset.role] || 0) + 1 }), {});
+  if (counts.first_frame > 1 || counts.last_frame > 1) throw Object.assign(new Error('首帧与尾帧图片各最多上传 1 张。'), { status: 400 });
+  const limits = referenceLimitsByModel[model] || defaultReferenceLimits;
+  for (const [role, max] of Object.entries(limits)) {
+    if (counts[role] > max) {
+      const noun = role === 'reference_image' ? '参考图片' : role === 'reference_video' ? '参考视频' : '参考音频';
+      const unit = role === 'reference_image' ? '张' : '个';
+      throw Object.assign(new Error(`${model} 的${noun}最多上传 ${max} ${unit}。`), { status: 400 });
+    }
+  }
+  return assets;
+}
 const terminalStatuses = new Set(['completed', 'succeeded', 'success', 'done', 'failed', 'error', 'canceled', 'cancelled']);
 
 function taskData(data) {
@@ -31,6 +100,13 @@ function taskId(data) {
 
 function taskStatus(data) {
   return String(taskData(data)?.status ?? data?.status ?? 'queued').toLowerCase();
+}
+
+function taskError(data) {
+  const detail = taskData(data)?.error ?? data?.error;
+  if (typeof detail === 'string') return detail;
+  if (detail && typeof detail === 'object') return detail.message || detail.code || '';
+  return '';
 }
 
 function isTerminal(status) {
@@ -94,7 +170,7 @@ async function readJson(req) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
-    if (body.length > 20_000) throw Object.assign(new Error('请求内容过长'), { status: 413 });
+    if (body.length > maxBodyLength) throw Object.assign(new Error('请求内容过大，请减小素材体积。'), { status: 413 });
   }
   try { return JSON.parse(body); }
   catch { throw Object.assign(new Error('请求格式不正确'), { status: 400 }); }
@@ -132,11 +208,13 @@ export function createAppServer({ apiKey = process.env.VIDEO_API_KEY, baseUrl = 
 
   async function recordStatus(id, data, details = {}) {
     const status = taskStatus(data);
+    const error = taskError(data);
     const now = new Date().toISOString();
     return taskStore.upsert({
       id,
       ...details,
       status,
+      ...(error ? { error } : {}),
       updatedAt: now,
       ...(isTerminal(status) ? { completedAt: now } : {}),
     });
@@ -188,10 +266,26 @@ export function createAppServer({ apiKey = process.env.VIDEO_API_KEY, baseUrl = 
           const model = typeof body.model === 'string' ? body.model.trim() : '';
           if (!prompt || prompt.length > 5000) return sendJson(res, 400, { error: '请输入 1–5000 字的画面描述。' });
           if (!model || model.length > 120) return sendJson(res, 400, { error: '请输入有效的模型 ID。' });
-          if (!allowedRatios.has(body.ratio)) return sendJson(res, 400, { error: '不支持所选画面比例。' });
+          const assets = normalizeAssets(body.assets, model);
+          const hasFrames = assets.some((asset) => asset.role === 'first_frame' || asset.role === 'last_frame');
+          const references = assets.filter((asset) => asset.role.startsWith('reference_'));
+          if (references.length) {
+            if (!supportsReferences(model)) return sendJson(res, 400, { error: `${model} 不支持多模态参考素材（参考图片 / 视频 / 音频）。` });
+            if (hasFrames) return sendJson(res, 400, { error: '首尾帧图生视频与多模态参考生视频不能混用，请只保留其中一类素材。' });
+            if (model.startsWith('MiniMax') && references.every((asset) => asset.role === 'reference_audio')) return sendJson(res, 400, { error: '多模态参考不能只输入音频，至少需要一张参考图片或一个参考视频。' });
+          }
+          if (hasFrames && model.startsWith('MiniMax')) {
+            if (body.ratio !== 'adaptive') return sendJson(res, 400, { error: '上传首帧 / 尾帧图片时，画面比例必须使用 adaptive（跟随图片）。' });
+          } else if (!allowedRatios.has(body.ratio)) {
+            return sendJson(res, 400, { error: '不支持所选画面比例。' });
+          }
+          const resolution = typeof body.resolution === 'string' ? body.resolution.trim() : '';
+          const acceptedResolutions = modelResolutions[model] || allowedResolutions;
+          if (resolution && !acceptedResolutions.has(resolution)) return sendJson(res, 400, { error: `${model} 不支持分辨率 ${resolution}，可用值：${[...acceptedResolutions].join('、')}。` });
           const duration = Number(body.duration);
           const maxDuration = model === 'Doubao-Seedance-2.5' ? 30 : 15;
-          if (!Number.isInteger(duration) || duration < 1 || duration > maxDuration) return sendJson(res, 400, { error: `${model} 的视频时长必须是 1–${maxDuration} 秒的整数。` });
+          const minDuration = modelMinDuration[model] || 1;
+          if (!Number.isInteger(duration) || duration < minDuration || duration > maxDuration) return sendJson(res, 400, { error: `${model} 的视频时长必须是 ${minDuration}–${maxDuration} 秒的整数。` });
           if (body.generateAudio != null && typeof body.generateAudio !== 'boolean') return sendJson(res, 400, { error: '音频选项格式不正确。' });
           const generateAudio = body.generateAudio !== false;
           if (body.subtitleText != null && typeof body.subtitleText !== 'string') return sendJson(res, 400, { error: '字幕内容格式不正确。' });
@@ -206,13 +300,20 @@ export function createAppServer({ apiKey = process.env.VIDEO_API_KEY, baseUrl = 
             : '';
           const payload = {
             model,
-            content: [{ type: 'text', text: `${prompt}${subtitleInstruction}` }],
+            content: [
+              { type: 'text', text: `${prompt}${subtitleInstruction}` },
+              ...assets.map((asset) => {
+                const contentType = assetContentTypes[asset.role];
+                return { type: contentType, [contentType]: { url: asset.url }, role: asset.role };
+              }),
+            ],
             ratio: body.ratio,
             duration,
             generate_audio: generateAudio,
-            watermark: false,
+            ...(resolution ? { resolution } : {}),
+            ...(model.startsWith('MiniMax') ? { aigc_watermark: false } : { watermark: false }),
           };
-          const response = await callApi('/v1/videos', { method: 'POST', body: JSON.stringify(payload) });
+          const response = await callApi('/v1/videos', { method: 'POST', body: JSON.stringify(payload), signal: AbortSignal.timeout(180_000) });
           const data = await response.json();
           const id = taskId(data);
           if (id) {
@@ -271,6 +372,6 @@ export function createAppServer({ apiKey = process.env.VIDEO_API_KEY, baseUrl = 
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const port = Number(process.env.PORT || 3000);
+  const port = Number(process.env.PORT || 3002);
   createAppServer().listen(port, () => console.log(`AI 视频工作台已启动：http://localhost:${port}`));
 }

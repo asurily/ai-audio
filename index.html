@@ -89,6 +89,13 @@
                 <div class="mention-menu hidden" id="mentionMenu" role="listbox"></div>
               </div>
 
+              <div class="template-area asset-area hidden" id="assetArea">
+                <div class="template-toolbar">
+                  <div><strong>生成素材</strong><span>上传首帧 / 尾帧或参考素材，让画面更贴近预期</span></div>
+                </div>
+                <div class="asset-grid" id="assetGrid"></div>
+              </div>
+
               <div class="form-divider"></div>
               <div class="section-heading settings-heading"><div><span class="section-index">02 / SETTINGS</span><h2>生成设置</h2></div></div>
 
@@ -101,11 +108,22 @@
                     <option value="Doubao-Seedance-2.0">Doubao-Seedance-2.0</option>
                     <option value="Doubao-Seedance-2.0-fast">Doubao-Seedance-2.0-fast</option>
                     <option value="Doubao-Seedance-2.0-mini">Doubao-Seedance-2.0-mini</option>
+                    <option value="MiniMax-H3">MiniMax-H3</option>
+                    <option value="MiniMax-H3-Max">MiniMax-H3-Max</option>
                     <option value="custom">填写其他模型 ID…</option>
                   </select>
                   <span class="chevron" aria-hidden="true"></span>
                 </div>
                 <input class="custom-model hidden" id="customModel" type="text" maxlength="120" placeholder="输入服务支持的模型 ID" aria-label="其他模型 ID">
+              </div>
+
+              <div class="field hidden" id="resolutionField">
+                <label for="resolution">分辨率 <span>不同模型支持的档位不同</span></label>
+                <div class="select-wrap">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 2 2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+                  <select id="resolution" name="resolution"></select>
+                  <span class="chevron" aria-hidden="true"></span>
+                </div>
               </div>
 
               <fieldset class="ratio-field">
@@ -117,14 +135,21 @@
                   <label class="ratio-option"><input type="radio" name="ratio" value="4:3"><span class="ratio-shape classic"></span><strong>4:3</strong><small>经典</small></label>
                   <label class="ratio-option"><input type="radio" name="ratio" value="3:4"><span class="ratio-shape upright"></span><strong>3:4</strong><small>肖像</small></label>
                 </div>
+                <p class="ratio-note hidden" id="ratioNote">已上传首帧 / 尾帧，画面比例将自动跟随图片（adaptive）</p>
               </fieldset>
 
               <div class="advanced-settings">
                 <div class="field duration-field">
                   <label for="duration">视频时长 <span id="maxDurationLabel">最长 30 秒</span></label>
                   <div class="duration-control">
-                    <input id="duration" name="duration" type="range" min="5" max="30" step="5" value="10">
-                    <output id="durationOutput" for="duration">10 秒</output>
+                    <input id="duration" name="duration" type="range" min="5" max="30" step="1" value="10">
+                    <div class="duration-stepper">
+                      <output id="durationOutput" for="duration">10 秒</output>
+                      <div class="duration-stepper-buttons">
+                        <button id="durationIncrease" type="button" aria-label="增加 1 秒" title="增加 1 秒">▲</button>
+                        <button id="durationDecrease" type="button" aria-label="减少 1 秒" title="减少 1 秒">▼</button>
+                      </div>
+                    </div>
                   </div>
                   <div class="duration-marks" id="durationMarks" aria-hidden="true"><span>5s</span><span>10s</span><span>15s</span><span>20s</span><span>25s</span><span>30s</span></div>
                 </div>

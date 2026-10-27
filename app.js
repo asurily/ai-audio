@@ -3,6 +3,8 @@ const form = $('createForm');
 const promptInput = $('prompt');
 const modelSelect = $('model');
 const customModel = $('customModel');
+const resolutionSelect = $('resolution');
+const resolutionField = $('resolutionField');
 const indicator = $('previewIndicator');
 const meta = $('resultMeta');
 const message = $('message');
@@ -183,7 +185,11 @@ function taskStatus(data) {
 
 function errorText(data) {
   const value = taskData(data)?.error ?? data?.error;
-  return (typeof value === 'string' ? value : value?.message) || taskData(data)?.message || '视频生成失败，请修改描述后重试。';
+  const detail = (typeof value === 'string' ? value : value?.message || value?.code) || taskData(data)?.message;
+  const id = taskId(data) || currentTaskId;
+  return detail
+    ? `视频生成失败：${detail}${id ? `（任务 ID：${id}）` : ''}`
+    : `生成服务未提供失败原因${id ? `（任务 ID：${id}）` : ''}。请保留任务 ID，以便查询服务端日志或联系服务提供方。`;
 }
 
 function stopPolling() {
@@ -191,7 +197,7 @@ function stopPolling() {
   pollTimer = null;
 }
 
-function schedulePoll(delay = 20_000) {
+function schedulePoll(delay = 60_000) {
   stopPolling();
   pollTimer = setTimeout(pollTask, delay);
 }
@@ -233,13 +239,15 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const prompt = resolveTemplateMentions(promptInput.value.trim());
   const model = modelSelect.value === 'custom' ? customModel.value.trim() : modelSelect.value;
-  const ratio = form.elements.ratio.value;
+  const ratio = hasFrameAssets() ? 'adaptive' : form.elements.ratio.value;
   const duration = Number(form.elements.duration.value);
   const generateAudio = form.elements.generateAudio.checked;
   const subtitleEnabled = form.elements.subtitleEnabled.checked;
   const subtitleText = $('subtitleText').value.trim();
+  const assets = [...assetFiles.entries()].flatMap(([role, list]) => list.map(({ dataUrl }) => ({ role, url: dataUrl })));
   if (!prompt) return showMessage('请先描述你想生成的画面。');
   if (!model) return showMessage('请填写模型 ID。');
+  if (assets.some((asset) => asset.role.startsWith('reference_')) && hasFrameAssets()) return showMessage('首尾帧图生视频与多模态参考生视频不能混用，请移除其中一类素材。');
   stopPolling();
   player.removeAttribute('src');
   player.load();
@@ -251,7 +259,7 @@ form.addEventListener('submit', async (event) => {
     const data = await api('/api/videos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, model, ratio, duration, generateAudio, subtitleEnabled, subtitleText }),
+      body: JSON.stringify({ prompt, model, ratio, duration, generateAudio, subtitleEnabled, subtitleText, ...(assets.length ? { assets } : {}), ...(resolutionField.classList.contains('hidden') ? {} : { resolution: resolutionSelect.value }) }),
     });
     const id = taskId(data);
     if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) throw new Error('生成服务未返回有效的任务 ID。');
@@ -306,6 +314,8 @@ function updateDuration() {
   const max = Number($('duration').max);
   $('durationOutput').textContent = `${value} 秒`;
   $('duration').style.setProperty('--range-progress', `${((value - min) / (max - min)) * 100}%`);
+  $('durationIncrease').disabled = value >= max;
+  $('durationDecrease').disabled = value <= min;
 }
 function updateDurationLimit() {
   const max = modelSelect.value === 'Doubao-Seedance-2.5' ? 30 : 15;
@@ -320,15 +330,172 @@ function updateDurationLimit() {
   updateDuration();
 }
 $('duration').addEventListener('input', updateDuration);
+for (const [id, delta] of [['durationIncrease', 1], ['durationDecrease', -1]]) {
+  $(id).addEventListener('click', () => {
+    const duration = $('duration');
+    duration.value = String(Math.max(Number(duration.min), Math.min(Number(duration.max), Number(duration.value) + delta)));
+    duration.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
 $('subtitleEnabled').addEventListener('change', () => {
   $('subtitleInputWrap').classList.toggle('hidden', !$('subtitleEnabled').checked);
   if ($('subtitleEnabled').checked) $('subtitleText').focus();
 });
 $('subtitleText').addEventListener('input', () => { $('subtitleCount').textContent = $('subtitleText').value.length; });
+const resolutionPresets = {
+  'Doubao-Seedance-2.5': [['720p', '720p'], ['480p', '480p'], ['1080p', '1080p']],
+  'MiniMax-H3': [['2K', '2K']],
+  'MiniMax-H3-Max': [['768P', '768P（推荐）'], ['480P', '480P']],
+};
+const assetCapabilities = {
+  'MiniMax-H3': { frames: true, references: true },
+  'MiniMax-H3-Max': { frames: true, references: false },
+  'Doubao-Seedance-2.5': { frames: false, references: true },
+};
+const referenceLimitPresets = {
+  'MiniMax-H3': { reference_image: 5, reference_video: 1, reference_audio: 1 },
+  'Doubao-Seedance-2.5': { reference_image: 30, reference_video: 10, reference_audio: 10 },
+};
+const defaultReferenceLimits = { reference_image: 5, reference_video: 1, reference_audio: 1 };
+const assetSlotDefs = [
+  { role: 'first_frame', kind: 'image', label: '首帧图片', multiple: false },
+  { role: 'last_frame', kind: 'image', label: '尾帧图片', multiple: false },
+  { role: 'reference_image', kind: 'image', label: '参考图片', multiple: true },
+  { role: 'reference_video', kind: 'video', label: '参考视频', multiple: true },
+  { role: 'reference_audio', kind: 'audio', label: '参考音频', multiple: true },
+];
+const assetFiles = new Map();
+let assetCapabilityKey = '';
+function updateResolutionField(model) {
+  const supportsResolution = model === 'Doubao-Seedance-2.5' || model.startsWith('MiniMax');
+  resolutionField.classList.toggle('hidden', !supportsResolution);
+  if (!supportsResolution) return;
+  const options = resolutionPresets[model] || [['2K', '2K'], ['768P', '768P'], ['480P', '480P']];
+  resolutionSelect.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+}
+function modelAssetCapability(model) {
+  if (assetCapabilities[model]) return assetCapabilities[model];
+  if (model.startsWith('MiniMax') && model !== 'MiniMax-H3-Max') return { frames: true, references: true };
+  return null;
+}
+function modelReferenceLimits(model) {
+  return referenceLimitPresets[model] || defaultReferenceLimits;
+}
+function validateAssetFile(def, file) {
+  const limits = { image: 30 * 1024 * 1024, video: 100 * 1024 * 1024, audio: 30 * 1024 * 1024 };
+  if (file.size > limits[def.kind]) return `${def.label}不能超过 ${def.kind === 'video' ? 100 : 30}MB。`;
+  if (def.kind === 'image' && !/^image\/(jpe?g|png|webp|heic|heif)$/i.test(file.type)) return '图片仅支持 JPG、JPEG、PNG、WEBP、HEIC、HEIF 格式。';
+  if (def.kind === 'video' && !file.type.startsWith('video/')) return '请选择视频文件。';
+  if (def.kind === 'audio' && !file.type.startsWith('audio/')) return '请选择音频文件。';
+  return '';
+}
+function readAssetFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('读取文件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+function hasFrameAssets() {
+  return ((assetFiles.get('first_frame')?.length || 0) + (assetFiles.get('last_frame')?.length || 0)) > 0;
+}
+function updateRatioLock() {
+  const locked = hasFrameAssets();
+  $('ratioNote').classList.toggle('hidden', !locked);
+  form.querySelectorAll('input[name="ratio"]').forEach((input) => { input.disabled = locked; });
+}
+function renderAssetFiles(def, slot) {
+  const container = slot.querySelector('.asset-files');
+  container.replaceChildren();
+  (assetFiles.get(def.role) || []).forEach((item, index) => {
+    const chip = document.createElement('span');
+    chip.className = 'asset-file';
+    if (def.kind === 'image') {
+      const img = document.createElement('img');
+      img.src = item.dataUrl;
+      img.alt = item.name;
+      chip.append(img, Object.assign(document.createElement('i'), { textContent: item.name }));
+    } else {
+      chip.append(Object.assign(document.createElement('i'), { textContent: item.name }));
+    }
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.title = '移除';
+    remove.setAttribute('aria-label', `移除 ${item.name}`);
+    remove.addEventListener('click', () => {
+      (assetFiles.get(def.role) || []).splice(index, 1);
+      renderAssetFiles(def, slot);
+      updateRatioLock();
+    });
+    chip.append(remove);
+    container.append(chip);
+  });
+}
+function createAssetSlot(def, limits = defaultReferenceLimits) {
+  const max = def.multiple ? limits[def.role] : 1;
+  const slot = document.createElement('div');
+  slot.className = 'asset-slot';
+  const head = document.createElement('div');
+  head.className = 'asset-slot-head';
+  const unit = def.kind === 'image' ? '张' : '个';
+  head.append(Object.assign(document.createElement('strong'), { textContent: def.multiple ? `${def.label}（最多 ${max} ${unit}）` : def.label }));
+  const picker = document.createElement('label');
+  picker.className = 'asset-pick';
+  picker.textContent = `＋ 选择${def.kind === 'image' ? '图片' : def.kind === 'video' ? '视频' : '音频'}`;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = def.kind === 'image' ? '.jpg,.jpeg,.png,.webp,.heic,.heif,image/*' : `${def.kind}/*`;
+  if (def.multiple) input.multiple = true;
+  input.hidden = true;
+  picker.append(input);
+  const files = document.createElement('div');
+  files.className = 'asset-files';
+  input.addEventListener('change', async () => {
+    const picked = [...input.files];
+    input.value = '';
+    const list = assetFiles.get(def.role) || [];
+    for (const file of picked) {
+      const error = validateAssetFile(def, file);
+      if (error) return showMessage(error);
+      if (list.length >= max) return showMessage(`${def.label}最多 ${max} 个文件。`);
+      try { list.push({ name: file.name, dataUrl: await readAssetFile(file) }); }
+      catch { return showMessage(`读取 ${file.name} 失败。`); }
+    }
+    assetFiles.set(def.role, list);
+    renderAssetFiles(def, slot);
+    updateRatioLock();
+  });
+  slot.append(head, picker, files);
+  return slot;
+}
+function renderAssetArea(model) {
+  const capability = modelAssetCapability(model);
+  const key = capability ? `${capability.frames}-${capability.references}` : 'none';
+  if (key === assetCapabilityKey) return;
+  assetCapabilityKey = key;
+  assetFiles.clear();
+  updateRatioLock();
+  const grid = $('assetGrid');
+  grid.replaceChildren();
+  if (!capability) return $('assetArea').classList.add('hidden');
+  $('assetArea').classList.remove('hidden');
+  const limits = modelReferenceLimits(model);
+  assetSlotDefs
+    .filter((def) => def.role.startsWith('reference_') ? capability.references : capability.frames)
+    .forEach((def) => grid.append(createAssetSlot(def, limits)));
+}
 modelSelect.addEventListener('change', () => {
   customModel.classList.toggle('hidden', modelSelect.value !== 'custom');
   if (modelSelect.value === 'custom') customModel.focus();
+  updateResolutionField(modelSelect.value);
+  renderAssetArea(modelSelect.value);
   updateDurationLimit();
+});
+customModel.addEventListener('input', () => {
+  updateResolutionField(customModel.value.trim());
+  renderAssetArea(customModel.value.trim());
 });
 $('inspireButton').addEventListener('click', () => {
   promptInput.value = examples[exampleIndex++ % examples.length];
@@ -354,6 +521,8 @@ async function initialize() {
   }
   updateDuration();
   updateDurationLimit();
+  updateResolutionField(modelSelect.value);
+  renderAssetArea(modelSelect.value);
   let savedId = sessionStorage.getItem('videoTaskId');
   const savedTask = sessionStorage.getItem('videoTask');
   if (savedTask) {
